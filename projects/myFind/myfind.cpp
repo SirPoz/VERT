@@ -12,6 +12,9 @@
 #include <sys/msg.h>
 #include <string>
 
+using namespace std;
+
+
 #define KEY 521125900 /* unique key e.g., matriculation number */
 #define PERM 0660 /* starts with 0 to declare it as octal */
 
@@ -25,7 +28,7 @@ typedef struct
     string mPath;
 } message_t;
 
-using namespace std;
+
 /* Verbose Flag wird global gesetzt, damit der komplette Code es sehen kann. */
 unsigned short opt_verbose = 0;
 
@@ -36,24 +39,24 @@ void print_usage(char *programm_name)
     return;
 }
 
-void searchFile(string file)
+void searchFile(string file, string path)
 {
     message_t msg;
     int msgid = -1;
+    /*tries accessing the message queue*/
     if ((msgid = msgget(KEY, PERM)) == -1)
     {
       /* error handling */
       fprintf(stderr, "%d: Can't access message queue\n", (int)getpid());
-      
     }
 
    /* Fill message */
     msg.mType = 1;
     msg.mFilename = file;
-    msg.mPath = "./";
+    msg.mPath = path;
     msg.mPID = (long)getpid();
 
-    cout << msg.mType << ":" << msg.mFilename << ":" << msg.mPath << ":" << msg.mPID << endl;
+    
     
     /* Send message */
     if (msgsnd(msgid, &msg, sizeof(msg) - sizeof(long), 0) == -1)
@@ -63,9 +66,22 @@ void searchFile(string file)
       
     }
     
+    
 }
 
-/* Entry Point */
+
+//
+//
+//
+//
+//  START OF MAIN FUNCTION
+//
+//
+//
+//
+
+
+
 int main(int argc, char *argv[])
 {
     /*variables for option handling*/
@@ -78,6 +94,8 @@ int main(int argc, char *argv[])
     /*variables for searchpath and filename handling*/
     string searchPath;
     vector<string>filenames;
+
+
  
 
     while ((c = getopt(argc, argv, "Ri")) != EOF)
@@ -91,12 +109,14 @@ int main(int argc, char *argv[])
             case 'i':
                 insensitiveSearch = true;
             break;
+            default:
+                printf("-%c is not a supported option\n",c);
         }
 
     }
    /*checks if enough arguments have been submitted*/
     if ( argc - optind < 2 ) {
-        fprintf(stderr, "Fehler, es fehlen Argumente für diese Funktion\n");
+        fprintf(stderr, "There are not enough arguments to start the search\n");
         print_usage(argv[0]);
         exit(EXIT_FAILURE);
     } 
@@ -133,13 +153,14 @@ int main(int argc, char *argv[])
 
 
 
-
-
+    
+    
 
 
 
     /*FORKING of childprocesses*/
     pid_t childpid;
+    /* iterates through the filenames vector and forkes for every filename*/
     for(string file : filenames)
     {
         childpid = fork();
@@ -150,35 +171,58 @@ int main(int argc, char *argv[])
         }
         if(childpid == 0)
         {
-            searchFile(file);
+            /*the childprocess starts searching for the file in the searchpath then it will close itself*/
+            searchFile(file, searchPath);
             return 0;
-        }
-        else
-        {
-            cout << "Procees " << (long)getpid() << " is creating more forks"<< endl;
         }
     }
 
 
 
-
+    /* initialise variables to check the amount of messages in the message queue*/
+    struct msqid_ds buf;
+    int rc;
+    uint msgcount;
 
 
 
 
     /* Parent reads the queue after it has created all necessary forks*/
-    while ((childpid = waitpid(-1, NULL, WNOHANG)))
+    while(1)
     {
-      if (msgrcv(msgid, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1)
-      {
-         /* error handling */
-         fprintf(stderr, "%s: Can't receive from message queue\n", argv[0]);
-         return EXIT_FAILURE;
-      }
-      cout << msg.mPID <<": "<< msg.mFilename <<": "<< msg.mPath << endl;
-      if((childpid == -1) && (errno != EINTR)){
-        break;
-      }
+        /*get the number of messages in queue*/
+        rc = msgctl(msgid, IPC_STAT, &buf);
+        msgcount = (uint)(buf.msg_qnum);
+        
+        /*if messages in queue try to read them and print them*/
+        if(msgcount > 0)
+        {
+            if (msgrcv(msgid, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1)
+            {
+                fprintf(stderr, "%s: Can't receive from message queue\n", argv[0]);
+                return EXIT_FAILURE;
+            }
+            cout << msg.mPID <<": "<< msg.mFilename <<": "<< msg.mPath << endl;
+        }
+        else
+        {
+            /*if no messages in queue, check if childprocesses are still running*/
+            if((childpid = waitpid(-1, NULL, WNOHANG)))
+            {
+                if((childpid == -1) && (errno != EINTR))
+                {
+                    /* no child process are left alive and no messages are in the queue so while(1) is broken*/
+                    break;
+                }
+            }
+        }     
+    }
+
+    /* deletes the created message queue, only for development purposes*/
+    if(msgctl (msgid, IPC_RMID, NULL) == -1)
+    {
+        fprintf(stderr, "%s: Can't remove message queue\n", argv[0]);
+        return EXIT_FAILURE;
     }
     
     return (0);
