@@ -10,7 +10,15 @@
 #include <signal.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
-#include <string>
+
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <limits.h>
+#include <string.h>
+#include <algorithm>
+
+
 
 using namespace std;
 
@@ -24,8 +32,8 @@ typedef struct
 {
 	long mType;
     long mPID;
-	string mFilename;
-    string mPath;
+	char mFilename[MAX_DATA];
+    char mPath[MAX_DATA];
 } message_t;
 
 
@@ -39,32 +47,90 @@ void print_usage(char *programm_name)
     return;
 }
 
+string tolowers(string tolower)
+{
+
+   for_each(tolower.begin(), tolower.end(), [](char &c)
+                 { c = ::tolower(c); });
+   return tolower;
+}
+
+void searchfile(string searchpath, string filename, bool recursive, bool casesensitive)
+{
+
+   struct dirent *direntp;
+   DIR *dirp;
+   string newsearchpath;
+   string filepath;
+   string currentfile;
+
+   if ((dirp = opendir(searchpath.c_str())) == NULL)
+   {
+      //perror("Failed to open directory");
+      return;
+   }
+
+   while ((direntp = readdir(dirp)) != NULL)
+   {
+      if (direntp->d_type == 8)
+      {
+         
+
+         currentfile = (casesensitive) ? direntp->d_name : tolowers(direntp->d_name);
+         filename = (casesensitive) ? filename : tolowers(filename);
+        
+         if (currentfile.find(filename) != std::string::npos)
+         {
+            filepath = searchpath + "/" + direntp->d_name;
+            
+
+            message_t msg;
+            int msgid = -1;
+            /*tries accessing the message queue*/
+            if ((msgid = msgget(KEY, PERM)) == -1)
+            {
+            /* error handling */
+            fprintf(stderr, "%d: Can't access message queue\n", (int)getpid());
+            }
+
+            /* Fill message */
+            msg.mType = 1;
+            strcpy(msg.mFilename, filename.c_str());
+            strcpy(msg.mPath,filepath.c_str());
+            msg.mPID = (long)getpid();
+
+    
+    
+            /* Send message */
+            if (msgsnd(msgid, &msg, sizeof(msg) - sizeof(long), 0) == -1)
+            {
+            /* error handling */
+            fprintf(stderr, "%d: Can't send message\n", (int)getpid());
+            
+            }    
+         }
+        
+      }
+      if (direntp->d_type == 4)
+      {
+
+         if (recursive)
+         {
+            // strcmp returns false when both strings are equal
+            if (strcmp(direntp->d_name, "..") && strcmp(direntp->d_name, "."))
+            {
+               newsearchpath = searchpath + "/" + direntp->d_name;
+               
+               searchfile(newsearchpath, filename, recursive, casesensitive);
+            }
+         }
+      }
+   }
+}
+
+
 void searchFile(string file, string path)
 {
-    message_t msg;
-    int msgid = -1;
-    /*tries accessing the message queue*/
-    if ((msgid = msgget(KEY, PERM)) == -1)
-    {
-      /* error handling */
-      fprintf(stderr, "%d: Can't access message queue\n", (int)getpid());
-    }
-
-   /* Fill message */
-    msg.mType = 1;
-    msg.mFilename = file;
-    msg.mPath = path;
-    msg.mPID = (long)getpid();
-
-    
-    
-    /* Send message */
-    if (msgsnd(msgid, &msg, sizeof(msg) - sizeof(long), 0) == -1)
-    {
-      /* error handling */
-      fprintf(stderr, "%d: Can't send message\n", (int)getpid());
-      
-    }
     
     
 }
@@ -87,7 +153,7 @@ int main(int argc, char *argv[])
     /*variables for option handling*/
     int c;
    
-   /*recursive and case insensitive Search are deactivated by standard*/
+   /*recursive and case insensitive Search are deactivated by default*/
     bool recursiveSearch = false;
     bool insensitiveSearch = false;
    
@@ -97,7 +163,7 @@ int main(int argc, char *argv[])
 
 
  
-
+    /* reading the options */
     while ((c = getopt(argc, argv, "Ri")) != EOF)
     {
        /*check for options set and change the depending variables if necessary*/
@@ -109,12 +175,10 @@ int main(int argc, char *argv[])
             case 'i':
                 insensitiveSearch = true;
             break;
-            default:
-                printf("-%c is not a supported option\n",c);
         }
 
     }
-   /*checks if enough arguments have been submitted*/
+   /*checks if enough arguments have been passed*/
     if ( argc - optind < 2 ) {
         fprintf(stderr, "There are not enough arguments to start the search\n");
         print_usage(argv[0]);
@@ -172,7 +236,7 @@ int main(int argc, char *argv[])
         if(childpid == 0)
         {
             /*the childprocess starts searching for the file in the searchpath then it will close itself*/
-            searchFile(file, searchPath);
+            searchfile(searchPath, file, recursiveSearch, !insensitiveSearch);
             return 0;
         }
     }
@@ -181,17 +245,16 @@ int main(int argc, char *argv[])
 
     /* initialise variables to check the amount of messages in the message queue*/
     struct msqid_ds buf;
-    int rc;
     uint msgcount;
 
-
+    
 
 
     /* Parent reads the queue after it has created all necessary forks*/
     while(1)
     {
         /*get the number of messages in queue*/
-        rc = msgctl(msgid, IPC_STAT, &buf);
+        msgctl(msgid, IPC_STAT, &buf);
         msgcount = (uint)(buf.msg_qnum);
         
         /*if messages in queue try to read them and print them*/
