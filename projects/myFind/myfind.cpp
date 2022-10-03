@@ -6,14 +6,13 @@
 #include <iostream>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <cstring>
-#include <signal.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
-
+#include <sys/stat.h>
+#include <cstring>
+#include <signal.h>
 #include <dirent.h>
 #include <errno.h>
-#include <sys/stat.h>
 #include <limits.h>
 #include <string.h>
 #include <algorithm>
@@ -28,6 +27,7 @@ using namespace std;
 
 #define MAX_DATA 255
 
+/* define what a message on the message queue can contain*/
 typedef struct
 {
 	long mType;
@@ -64,11 +64,13 @@ void searchfile(string searchpath, string filename, bool recursive, bool casesen
    string filepath;
    string currentfile;
 
+    /* test if directory can be opened*/
    if ((dirp = opendir(searchpath.c_str())) == NULL)
    {
-      //perror("Failed to open directory");
+      fprintf(stderr, "Error opening the directory: %s\n", searchpath.c_str());
       return;
    }
+
 
    while ((direntp = readdir(dirp)) != NULL)
    {
@@ -76,21 +78,22 @@ void searchfile(string searchpath, string filename, bool recursive, bool casesen
       {
          
 
-         currentfile = (casesensitive) ? direntp->d_name : tolowers(direntp->d_name);
-         filename = (casesensitive) ? filename : tolowers(filename);
+        currentfile = (casesensitive) ? direntp->d_name : tolowers(direntp->d_name);
+        filename = (casesensitive) ? filename : tolowers(filename);
         
-         if (currentfile.find(filename) != std::string::npos)
-         {
+        if (currentfile.find(filename) != std::string::npos)
+        {
             filepath = searchpath + "/" + direntp->d_name;
             
 
             message_t msg;
             int msgid = -1;
+
             /*tries accessing the message queue*/
             if ((msgid = msgget(KEY, PERM)) == -1)
             {
-            /* error handling */
-            fprintf(stderr, "%d: Can't access message queue\n", (int)getpid());
+                /* error handling */
+                fprintf(stderr, "%d: Can't access message queue\n", (int)getpid());
             }
 
             /* Fill message */
@@ -104,11 +107,11 @@ void searchfile(string searchpath, string filename, bool recursive, bool casesen
             /* Send message */
             if (msgsnd(msgid, &msg, sizeof(msg) - sizeof(long), 0) == -1)
             {
-            /* error handling */
-            fprintf(stderr, "%d: Can't send message\n", (int)getpid());
-            
+                /* error handling */
+                fprintf(stderr, "%d: Can't send message\n", (int)getpid());
+                return;
             }    
-         }
+        }
         
       }
       if (direntp->d_type == 4)
@@ -119,20 +122,13 @@ void searchfile(string searchpath, string filename, bool recursive, bool casesen
             // strcmp returns false when both strings are equal
             if (strcmp(direntp->d_name, "..") && strcmp(direntp->d_name, "."))
             {
-               newsearchpath = searchpath + "/" + direntp->d_name;
+               newsearchpath = searchpath + "/" +  direntp->d_name;
                
                searchfile(newsearchpath, filename, recursive, casesensitive);
             }
          }
       }
    }
-}
-
-
-void searchFile(string file, string path)
-{
-    
-    
 }
 
 
@@ -143,8 +139,8 @@ void searchFile(string file, string path)
 //  START OF MAIN FUNCTION
 //
 //
-//
-//
+// The finding are passed via messagequeue from the childprocesses to the parent process. The parentprocess reads the messagequeue and prints
+// the messages in the correct syntax. 
 
 
 
@@ -182,7 +178,7 @@ int main(int argc, char *argv[])
     if ( argc - optind < 2 ) {
         fprintf(stderr, "There are not enough arguments to start the search\n");
         print_usage(argv[0]);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     } 
 
     /*first non option argv must be the searchpath, everything after that are filenames*/
@@ -198,7 +194,11 @@ int main(int argc, char *argv[])
 
 
 
-
+   if (opendir(searchPath.c_str()) == NULL)
+   {
+      fprintf(stderr, "%s: Searchpath is not a directory: %s\n", argv[0],searchPath.c_str());
+      return EXIT_FAILURE;
+   }
 
 
 
