@@ -1,0 +1,4 @@
+Senderererer
+Receiver
+Subject (max. 80 chars)
+message (multi-line; no length restrictions)
