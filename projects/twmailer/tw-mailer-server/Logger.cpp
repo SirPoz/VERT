@@ -5,13 +5,15 @@ using namespace std;
 
 class Logger{
     public:
-        Logger(){
-
+        Logger(pthread_mutex_t * mutex){
+            this->logMutex = logMutex;
         }
 
         void LogError(string log){
+            pthread_mutex_lock(this->logMutex);
             cout << error << log << endl;
             fflush(stdout);
+            pthread_mutex_unlock(this->logMutex);
         }
         void LogWarning(string log){
             cout << warning << log <<endl;
@@ -59,5 +61,6 @@ class Logger{
         string warning = "[\x1B[33mWARN\033[0m] ";
         string info = "[\x1B[34mINFO\033[0m] ";
         string normal =  "[\x1B[37mLOG \033[0m] ";
+        pthread_mutex_t * logMutex;
  
 };

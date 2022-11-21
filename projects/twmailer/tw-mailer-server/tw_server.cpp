@@ -1,16 +1,17 @@
 /* myserver.c */
 #include "SocketServer.cpp"
 #include "Logger.cpp"
+#include <pthread.h>
 
 
-
-
+static pthread_mutex_t logmutex;
 
 using namespace std;
 
 int main(int argc, char **argv)
 {
-   Logger * logger = new Logger();
+   pthread_mutex_init(&logmutex, NULL);
+   Logger * logger = new Logger(&logmutex);
 
    if (argc < 2)
    {
@@ -18,11 +19,8 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
    }
 
-   SocketServer * server = new SocketServer(argv[1],argv[2],logger);
+   SocketServer * server = new SocketServer(argv[1],argv[2],&logmutex);
    server->run();
-
-
-   
 
 
    free(server);

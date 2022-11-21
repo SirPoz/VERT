@@ -12,7 +12,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <bits/stdc++.h>
-
+#include <pthread.h>
 #include "Logger.cpp"
 #include "ServerProcessor.cpp"
 
@@ -23,9 +23,10 @@ class SocketServer{
     public:
         
 
-        SocketServer(char * portNumber, char * spoolname, Logger * logger){
+        SocketServer(char * portNumber, char * spoolname, pthread_mutex_t * logMutex){
             this->setup = false;
-            log = logger;
+            this->log = new Logger(logMutex);
+            this->mutex = logMutex;
             if(checkPort(portNumber))
             {
                 this->log->LogSuccess("port could be intepreted as number");
@@ -45,6 +46,7 @@ class SocketServer{
                 this->log->LogError("setup was not successful, server could not be started");
                 return;
             }
+            
             srv_socket = socket(AF_INET, SOCK_STREAM, 0);
 
             memset(&address, 0, sizeof(address));
@@ -76,9 +78,9 @@ class SocketServer{
                 if (comm_socket > 0)
                 {
                     this->log->LogSuccess("client connected from " + convertToString(inet_ntoa(cliaddress.sin_addr)) + ":" + to_string(ntohs(cliaddress.sin_port))+"\n");
-                    ServerProcessor processor = ServerProcessor(comm_socket,this->spoolpath,convertToString(inet_ntoa(cliaddress.sin_addr)) + ":" + to_string(ntohs(cliaddress.sin_port)),this->log);
-                    thread t1(&ServerProcessor::run, &processor);
                     
+                    threads.push_back(new ServerProcessor(comm_socket,this->spoolpath,convertToString(inet_ntoa(cliaddress.sin_addr)),this->mutex));
+                              
                 }
 
                 close(comm_socket);
@@ -99,7 +101,8 @@ class SocketServer{
         char *p;
         string spoolpath = "./";
         struct sockaddr_in address, cliaddress;
-        vector<thread> threads;
+        vector<ServerProcessor *> threads;
+        pthread_mutex_t * mutex;
         Logger * log;
 
 

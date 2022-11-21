@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <vector>
 #include <regex>
+#include <pthread.h>
 
 #include "ldap.cpp"
 
@@ -15,20 +16,22 @@
 
 class ServerProcessor{
     public:
-        ServerProcessor(int client, string spool, string userip, Logger * logger)
+        ServerProcessor(int client, string spool, string userip, pthread_mutex_t * logMutex)
         {
 
             this->ldap = new Ldaphandler();
             this->clientsocket = client;
             this->spoolpath = spool;
             this->authenticated = false;
-            this->log = logger;
+            this->log = new Logger(logMutex);
             this->useradress = userip;
-            
+            pthread_t thread;
+            pthread_create(&thread,NULL,ServerProcessor::addHandler,this);
         }
 
         void run()
         {
+            this->log->LogSuccess("processor started for " + this->useradress);
             while(clientsocket > 0)
             {
 
@@ -47,13 +50,14 @@ class ServerProcessor{
 
 
                 size = recv(clientsocket, buffer, BUF-1, 0);
+                
                 buffer[size] = '\0';
                 this->currentstream.str("");
                 this->currentstream.clear();
                 this->currentstream << buffer;
 
                 getline(this->currentstream, message);
-
+                this->log->LogInfo(message);
                 //if authenticated the user will have access to all functions of the server
                 if(authenticated)
                 {
@@ -94,13 +98,21 @@ class ServerProcessor{
                             return;
                             break;
                         default:
-                            this->log->LogWarning("unautherized access attempt by " + this->useradress);
+                            //this->log->LogWarning("unautherized access attempt by " + this->useradress);
                             sendResponse("ERR\nAuthenticate first to accesss all functions\n");
                             break;
                     }
                 }
             }
         }
+
+        static void * addHandler(void * data)
+        {
+            ServerProcessor * connection = (ServerProcessor *) data;
+            connection->run();
+            return NULL;
+        }
+
     private:
         string useradress;
         bool authenticated;
