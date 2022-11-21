@@ -15,12 +15,8 @@ using namespace std;
 
 enum commands { Send, List, Read, Del , Quit ,Error};
 
-
+//Reads the command and returns the corresponding ID
 commands CheckCommand(char *message){
-
-
-    //cout << message << endl;
-
 
     if(strcmp(message, "SEND") == 0){
         return Send;
@@ -69,38 +65,20 @@ void sendmail(int clientsocket, stringstream &message, string spoolpath){
      
     getline(message,subject,'\n');
 
-    
-   
-
 
     if(sender.length() > 8 || receiver.length() > 8 || subject.length() > 80){
-
-        //strcpy(buffer,"Err\n");
-        //send(clientsocket, buffer, strlen(buffer),0);
 
         sendresponse(clientsocket, "Err\n");
         cout << "error" << endl;
         return;
     }
 
-    /*cout<<sender << endl;
-    
-    cout<<receiver << endl;
-    
-    cout<<subject << endl;*/
-
-
-
    if (writefile(sender, receiver,subject, message,spoolpath)){
 
-        // strcpy(buffer,"OK\n");
-         //send(clientsocket, buffer, strlen(buffer),0);
          sendresponse(clientsocket, "OK\n");
          
    }
    else{
-         //strcpy(buffer,"Err\n");
-         //send(clientsocket, buffer, strlen(buffer),0);
          sendresponse(clientsocket, "Err\n");   
    }
 
@@ -117,12 +95,6 @@ void listmails(int clientsocket, stringstream &message, string spoolpath){
     getline(message,user,'\n');
     
     mailist = create_mail_list(user, spoolpath);
-
-    //cout << mailist << endl;
-
-    //strcpy(buffer,mailist.c_str());
-
-    //send(clientsocket, buffer, strlen(buffer),0);
 
     sendresponse(clientsocket,  mailist);
 
@@ -152,8 +124,6 @@ void readmail(int clientsocket,stringstream &message, string spoolpath){
 
     if(!strcmp(filepath.c_str(),"Error")){
 
-         //strcpy(buffer,"Err\n");
-         //send(clientsocket, buffer, strlen(buffer),0);
          sendresponse(clientsocket, "Err\n");   
          return;
     }
@@ -188,12 +158,12 @@ void del_mail(int clientsocket,stringstream &message, string spoolpath){
 
     if(!strcmp(filepath.c_str(),"Error")){
 
-         //strcpy(buffer,"Err\n");
-         //send(clientsocket, buffer, strlen(buffer),0);
          sendresponse(clientsocket, "Err\n");   
          return;
     }
 
+
+    //Checking if the message delition was successful or not
     if(remove(filepath.c_str()) == 0)
     {
         sendresponse(clientsocket, "OK\n");   
@@ -210,10 +180,6 @@ void handlemail(int clientsocket, string spoolpath){
     int size; 
     char buffer[BUF];
     string message;
-    //string test ="SEND\nSender\nReceiver\nSubject\nHello\nWorld\nTest\n.\n";
-    //string test ="READ\nReceiver\n5\n.\n";
-    //string test ="DEL\nReceiver\n5\n.\n";
-    //string test ="QUIT\nReceiver\n5\n.\n";
     char Cmd[5];
 
 
@@ -234,9 +200,6 @@ void handlemail(int clientsocket, string spoolpath){
 
         strcpy(Cmd,message.c_str());
 
-        //cout << CheckCommand(Cmd) << endl;
-
-            
         switch(CheckCommand(Cmd))
         {
             case Send:
@@ -285,11 +248,6 @@ void handlemail(int clientsocket, string spoolpath){
                 break;
 
             }
-
-
-           // cout << "TestSwitchEnde" << endl;
-
-        
     }
 
 }

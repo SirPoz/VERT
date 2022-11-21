@@ -1,11 +1,11 @@
 
-all: myclient myserver
+all: tw_client tw_server
 
-myclient:
-	g++ -o myclient myclient.cpp
+tw_client:
+	g++ -o tw_client tw_client.cpp
 
-myserver:
-	g++ -o myserver myserver.cpp
+tw_server:
+	g++ -std=c++11 -Wall -o tw_server tw_server.cpp -lldap -llber
 
 clean:
-	rm -f *~ myclient myserver
+	rm -f *~ tw_client tw_server

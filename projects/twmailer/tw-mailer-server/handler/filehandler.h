@@ -1,20 +1,14 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string>
-#include <iostream>
 #include <sstream>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
-#include <iostream>
 #include <bits/stdc++.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -40,7 +34,6 @@ string create_user_dir(string username , string spoolpath){
 
      if(mkdir(dirpath.c_str(), 0777) == -1){
 
-         //cerr << " Error : " << strerror(errno) << endl;
          return spoolpath + "/" + username; 
 
      }
@@ -97,6 +90,7 @@ int countmessages(string searchpath){
    struct dirent *direntp;
    DIR *dirp;
    int msgcounter = 0;
+   string temp;
     // test if directory can be opened
    if ((dirp = opendir(searchpath.c_str())) == NULL)
    {
@@ -109,8 +103,11 @@ int countmessages(string searchpath){
    {
       if (direntp->d_type == DT_REG)
       {
-         
-        msgcounter++;
+         temp =  direntp->d_name;
+          if (temp.find("_message") != std::string::npos)
+        {
+           msgcounter++;  
+        }
         
       }
    }
@@ -126,7 +123,6 @@ bool writefile(string sender, string recipient, string subject, stringstream &bo
 
     string filepath;
     string line;
-   //stringstream stream(body);
     int msgID;
    
     filepath = create_user_dir(recipient,spoolpath);
@@ -182,6 +178,25 @@ string readfile(string filepath){
 }
 
 
+int findmsgID(char array[]){
+
+   char tosearch = '.';
+
+      for(int n = 0; n < 256; ++n) 
+      {
+         if(array[n] == tosearch){
+
+            return n-1;
+         }
+
+
+      }
+       return 0;
+}
+
+
+
+
 
 string create_mail_list(string user, string spoolpath){
 
@@ -193,10 +208,14 @@ string create_mail_list(string user, string spoolpath){
    int messagecounter;
    fstream file;
    string subject;
+   string temp;
+   string msgID;
+
+
 
    if(countmessages(path) == 0){
 
-      return "0";
+      return "0\n";
    }
 
 
@@ -214,23 +233,14 @@ string create_mail_list(string user, string spoolpath){
    {
       if (direntp->d_type == DT_REG)
       {  
+         msgID = direntp->d_name[findmsgID(direntp->d_name)];
          file.open(path +"/"+ direntp->d_name);
          getline(file, subject);
          getline(file, subject);
          getline(file, subject);
-         mailist = mailist + subject + "\n";
-       /* currentfile = (casesensitive) ? direntp->d_name : tolowers(direntp->d_name);
-        filename = (casesensitive) ? filename : tolowers(filename);
-        
-        if (currentfile.find(filename) != std::string::npos)
-        {
-            filepath = searchpath + "/" + direntp->d_name;
-        }*/
-        
+         mailist = mailist + msgID + ") " + subject + "\n";
       }
    }
-
-
    return mailist;
 }
 

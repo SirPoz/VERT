@@ -45,9 +45,10 @@ string sendMail(){
     cin >> receiver;
 
     cout << "Please enter subject: ";
-    cin >> subject;
+    getline(cin >> ws, subject);
 
-    cout << "Please enter message (close with a ;):\n------------------------------------------\n";
+    cout << "Please enter message (close with a ;):" << endl;
+    cout << "------------------------------------------" << endl;
     while(1)
     {
         getline(cin,line);
@@ -59,7 +60,7 @@ string sendMail(){
 
     }
 
-    message = "SEND\n" + CharToString(user) + "\n" + CharToString(receiver) + "\n" + subject + "\n" + text + "\n" + ".\n";
+    message = "SEND\n" + CharToString(user) + "\n" + CharToString(receiver) + "\n" + subject + text + "\n" + ".\n";
    
     return message;
 
@@ -159,9 +160,9 @@ bool clientMenu(int cli_socket){
 
     }
 
-    cout << "----------------------------" << endl;
+   /* cout << "----------------------------" << endl;
     cout << message << endl;
-    cout << "----------------------------" << endl;
+    cout << "----------------------------" << endl;*/
     send(cli_socket, message.c_str(), strlen(message.c_str()), 0);
     
     return state;
