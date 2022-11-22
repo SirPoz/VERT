@@ -16,13 +16,18 @@
 #include <dirent.h>
 #include <ctime>
 #include <vector>
-#include "email.cpp"
+#include "model/Email.cpp"
 
 using namespace std;
 
 class filehandler
 {
 public:
+   filehandler()
+   {
+
+   }
+
    string tolowers(string tolower)
    {
       for_each(tolower.begin(), tolower.end(), [](char &c)
@@ -305,7 +310,7 @@ public:
          lines.push_back(temp);
       }
 
-       for (int i = 0; i < lines.size(); i++)
+      for (int i = 0; i < lines.size(); i++)
       {
           mailisttemp += to_string(i+1) + ") " + lines[i] + "\n";
       }

@@ -1,5 +1,3 @@
-#include "Logger.cpp"
-
 #include <unistd.h>
 #include <errno.h>
 #include <string>
@@ -16,22 +14,19 @@
 
 class ServerProcessor{
     public:
-        ServerProcessor(int client, string spool, string userip, pthread_mutex_t * logMutex)
+        ServerProcessor(int client, string spool, string userip, string threadid)
         {
-
             this->ldap = new Ldaphandler();
             this->clientsocket = client;
             this->spoolpath = spool;
             this->authenticated = false;
-            this->log = new Logger(logMutex);
             this->useradress = userip;
-            pthread_t thread;
-            pthread_create(&thread,NULL,ServerProcessor::addHandler,this);
+            this->threadid = threadid;
         }
 
         void run()
         {
-            this->log->LogSuccess("processor started for " + this->useradress);
+            
             while(clientsocket > 0)
             {
 
@@ -41,7 +36,6 @@ class ServerProcessor{
                 }
                 if(blacklist(false))
                 {
-                    this->log->LogWarning("blocked IP tried to access");
                     sendResponse("ERR\nYou have been blocked. Please try again later");
                     return;
                 } 
@@ -57,61 +51,36 @@ class ServerProcessor{
                 this->currentstream << buffer;
 
                 getline(this->currentstream, message);
-                this->log->LogInfo(message);
+               
                 //if authenticated the user will have access to all functions of the server
-                if(authenticated)
-                {
-                    switch(checkMethod(message.c_str()))
+                switch(checkMethod(message.c_str()))
                     {
                         case SEND:
-                            this->sendEmail();
+                            (this->authenticated) ? this->sendEmail() : sendResponse("ERR\nlogin first!");
                             break;
                         case LIST:
-                            this->listEmail();
+                            (this->authenticated) ? this->listEmail() : sendResponse("ERR\nlogin first!");
                             break;
                         case READ:
-                            this->readEmail();
+                            (this->authenticated) ? this->readEmail() : sendResponse("ERR\nlogin first!");
                             break;
                         case DEL:
-                            this->delEmail();
+                            (this->authenticated) ? this->delEmail() : sendResponse("ERR\nlogin first!");
+                            break;
+                        case LOGIN:
+                            this->login();
                             break;
                         case QUIT:
-                            (authenticated) ? this->log->Log(this->username + " quit its session") : this->log->Log("session was quit from " + this->useradress);
                             return;
-                            break;
+                            
                         default:
                             this->sendResponse("ERR\nUnknown option");
                             break;
                     }
-                }
-
-                //if not authenticated the user will only be able to login or quit
-                else
-                {
-                    switch(checkMethod(message.c_str()))
-                    {
-                        case LOGIN:
-                            login();
-                            break;
-                        case QUIT:
-                            (authenticated) ? this->log->Log(this->username + " quit its session") : this->log->Log("session was quit from " + this->useradress);
-                            return;
-                            break;
-                        default:
-                            //this->log->LogWarning("unautherized access attempt by " + this->useradress);
-                            sendResponse("ERR\nAuthenticate first to accesss all functions\n");
-                            break;
-                    }
-                }
+                
             }
         }
 
-        static void * addHandler(void * data)
-        {
-            ServerProcessor * connection = (ServerProcessor *) data;
-            connection->run();
-            return NULL;
-        }
 
     private:
         string useradress;
@@ -126,11 +95,13 @@ class ServerProcessor{
         char Cmd[5];
         Ldaphandler * ldap;
         stringstream currentstream;
+        string threadid;
 
         enum methods {SEND, LIST, DEL, READ, QUIT, LOGIN, ERROR};
 
 
-        methods checkMethod(const char * message){
+        methods checkMethod(const char * message)
+        {
 
             if(strcmp(message, "SEND") == 0){
                 return SEND;
@@ -166,8 +137,7 @@ class ServerProcessor{
             getline(this->currentstream,temp_user);
             getline(this->currentstream,temp_pass);
 
-            log->LogInfo("User: " + temp_user);
-            log->LogInfo("Pass: " + temp_pass);
+          
 
             ldapresult = this->ldap->login(temp_user,temp_pass);
 
@@ -180,10 +150,8 @@ class ServerProcessor{
                     blacklist(true);
                     break;
                 case LDAP_LOGIN_ERROR:
-                    this->log->LogError("LDAP Server could not be reached");
                     break;
                 default:
-                    this->log->LogWarning("LDAP functionality does not work");
                     break;
             }
 
@@ -219,8 +187,9 @@ class ServerProcessor{
         }
 
         void sendResponse(string response)
-        {
-            strcpy(this->buffer, response.c_str());
+        {    
+            string responsebody = response + "\n" + this->threadid;
+            strcpy(this->buffer, responsebody.c_str());
             send(this->clientsocket, buffer, strlen(buffer),0);
         }
 

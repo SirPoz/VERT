@@ -26,7 +26,7 @@ class SocketServer{
         SocketServer(char * portNumber, char * spoolname, pthread_mutex_t * logMutex){
             this->setup = false;
             this->log = new Logger(logMutex);
-            this->mutex = logMutex;
+            
             if(checkPort(portNumber))
             {
                 this->log->LogSuccess("port could be intepreted as number");
@@ -40,7 +40,8 @@ class SocketServer{
             }
         }
 
-        void run(){
+        void start(){
+            this->log->LogSuccess("server started...");
             if(!this->setup)
             {
                 this->log->LogError("setup was not successful, server could not be started");
@@ -78,17 +79,36 @@ class SocketServer{
                 if (comm_socket > 0)
                 {
                     this->log->LogSuccess("client connected from " + convertToString(inet_ntoa(cliaddress.sin_addr)) + ":" + to_string(ntohs(cliaddress.sin_port))+"\n");
-                    
-                    threads.push_back(new ServerProcessor(comm_socket,this->spoolpath,convertToString(inet_ntoa(cliaddress.sin_addr)),this->mutex));
-                              
+                    clientsocket client;
+                    client.client = comm_socket;
+                    client.spool = this->spoolpath;
+                    client.userip = convertToString(inet_ntoa(cliaddress.sin_addr));
+                    this->log->LogSuccess("client setup successful");
+                    pthread_t newThread;  
+                    pthread_create(&newThread,NULL,&SocketServer::run,&client);
+                    threads.push_back(newThread);      
                 }
 
-                close(comm_socket);
+                //close(comm_socket);
             }
             this->log->LogInfo("server shutting down");
             close(srv_socket);
             return;
 
+        }
+
+        static void * run(void * socket)
+        {
+            printf("thread start");
+            /*thread::id this_id = this_thread::get_id();
+            stringstream idtostring;
+            idtostring << this_id;
+            string threadid = "0000";
+            printf(threadid.c_str());
+            clientsocket * client = (clientsocket *) socket;
+            ServerProcessor processor = ServerProcessor(client->client,client->spool,client->userip, threadid);
+            processor.run();*/
+            return NULL;
         }
 
     private:
@@ -101,11 +121,17 @@ class SocketServer{
         char *p;
         string spoolpath = "./";
         struct sockaddr_in address, cliaddress;
-        vector<ServerProcessor *> threads;
-        pthread_mutex_t * mutex;
+        vector<pthread_t> threads;
         Logger * log;
 
 
+        
+
+        struct clientsocket{
+            int client;
+            string userip;
+            string spool;
+        };
 
 
         bool checkPort(char * portNumber)
@@ -120,7 +146,6 @@ class SocketServer{
                 }
                 else
                 {
-                    this->log->LogError("port could not be interpreted as number");
                     return false;
                 }
             }

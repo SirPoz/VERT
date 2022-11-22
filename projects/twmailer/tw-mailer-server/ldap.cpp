@@ -36,6 +36,8 @@ class Ldaphandler{
 public:
 
 int login(string username, string password){
+   printf("user:%s pass:%s\n",username.c_str(),password.c_str());
+
    LDAP *ld;			/* LDAP resource handle */
    LDAPMessage *result, *e;	/* LDAP result handle */
    BerElement *ber;		/* array of attributes */

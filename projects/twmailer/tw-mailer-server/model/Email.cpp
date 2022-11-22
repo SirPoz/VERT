@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include <string.h>
 #include <iostream>
@@ -21,17 +22,22 @@ class email{
             this->receiver = rec;
             this->subject = subj;
             this->body = bod;
-            this->id = this->hash(rec,subj);
+            this->id = this->hash(send);
         }
 
     private:
 
-        string hash(string receiver, string subject)
+        string hash(string sender)
         {
-            const auto p1 = system_clock::now();
-            unsigned long time = duration_cast<milliseconds>(p1.time_since_epoch()).count();
+            const auto p1 = chrono::system_clock::now();
+            unsigned long timestamp = chrono::duration_cast<chrono::milliseconds>(p1.time_since_epoch()).count();
+            unsigned int date = (int)timestamp/1000000;
+            unsigned int time = (int)timestamp - (date*1000000);
 
-            
+
+            return to_string(date) + sender + to_string(time);
 
         }
-}
+
+        
+};
