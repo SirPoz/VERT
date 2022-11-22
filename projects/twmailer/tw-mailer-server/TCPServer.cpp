@@ -12,54 +12,76 @@
 #include <bits/stdc++.h>
 #include <pthread.h>
 #include <vector>
+#include <csignal>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 #include "TCPParse.cpp"
 #include "TCPProcessor.cpp"
 #include "ldap.cpp"
+#include "Logger.cpp"
 
 using namespace std;
+
+
+static vector<pid_t> forks;
+static volatile sig_atomic_t running = 1;
+
+void signalhandler(int sig);
+
+
+
+
+
 class TCPServer{
     public:
         TCPServer(char * port, char * spool);
         ~TCPServer();
         void run(string spool, int srv_socket,  socklen_t addrlen, struct sockaddr_in cliaddress);
         void start();
+        void stop();
     private:
         //setup
         bool setup;
         int port;
         string spoolpath;
+        bool running;
+        Logger * log = new Logger();
 
         bool checkPort(char * portnumber);
         bool createSpool(char * spool);
         string convertToString(char * charArray);
         static bool login(TCPParse * parse);
-
+        bool checkBlock(string entry);
+        
         //network
         int srv_socket;
         socklen_t addrlen;
         struct sockaddr_in address, cliaddress;
-        pthread_t threads[20];
+       
 };
 
 TCPServer::TCPServer(char * portNumber, char * spoolname)
 {
     setup = false;
+     
+    
+
     if(checkPort(portNumber))
     {
         sscanf(portNumber,"%d",&port);
-        printf("port set\n") ;
+        log->LogSuccess("port set");
     }
     else
     {
-        printf("port must be a number\n") ;
+        log->LogError("port must be a number") ;
         return;
     }
     if(!createSpool(spoolname))
     {
         return;
     }
-    printf("spool set\n") ;
+    log->LogSuccess("spool set") ;
 
     srv_socket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -70,58 +92,86 @@ TCPServer::TCPServer(char * portNumber, char * spoolname)
 
     if (bind(srv_socket, (struct sockaddr *)&address, sizeof(address)) != 0)
     {
-        printf("bind unsuccessful\n") ;
+        log->LogError("bind unsuccessful") ;
         return;
     }
-    printf("bind successful\n") ;
+    log->LogSuccess("bind successful") ;
     
 
     if (listen(srv_socket, 5) != 0)
     {
-        printf("listen unsuccessful\n") ;
+        log->LogError("listen unsuccessful") ;
         return;
     }
-    printf("listen successful\n") ;
+    log->LogSuccess("listen successful") ;
 
     addrlen = sizeof(struct sockaddr_in);
-
-    printf("setup complete\n") ;
     setup = true;
+
+    log->LogSuccess("setup complete") ;
+    
+    fflush(stdout);
 }
 
 TCPServer::~TCPServer()
 {
-
+    
 }
 
+//starts server and forks it
 void TCPServer::start()
 {
-    int forks = 5;
-    for(int i = 0; i < 5; i++)
+    
+    
+    pid_t pid;
+    for(int i = 0; i < 7; i++)
     {
-        pid_t pid;
+        
         pid = fork();
         switch(pid)
         {
             case -1:
-                printf("failed to fork");
-                break;
-            case 0:
-                run(this->spoolpath,this->srv_socket,this->addrlen,this->cliaddress);
-                forks--;
-                return;
-                break;
-            case 1:
                 
+                return;
+
+            case 0:
+                
+                run(this->spoolpath,this->srv_socket,this->addrlen,this->cliaddress);
+                return;
+
+            default:
+                forks.push_back(pid);
                 break;
         }
-    }   
-    while(forks > 0)
+        
+    }
+
+    
+    while(running)
     {
-        //do nothing
+        
+    
     }
     
+    
 }
+
+void TCPServer::stop()
+{
+  for(auto & pid : forks) 
+  {
+    if(getpid() != (pid_t)pid)
+    {
+        kill((pid_t)pid, SIGINT);
+    } 
+  }
+  close(srv_socket);
+
+  return;
+}
+
+
+//----------------IPC---------------------------------------------------------------------------//
 
 void TCPServer::run(string spool, int srv_socket,  socklen_t addrlen, struct sockaddr_in cliaddress)
 {
@@ -130,93 +180,108 @@ void TCPServer::run(string spool, int srv_socket,  socklen_t addrlen, struct soc
         printf("server could not be started\n") ;
         return;
     }
-    while (1)
+    while (running)
     {
-        printf("\nServer %d waiting for connection...\n", getppid());
+        
+        printf("\nServer %d waiting for connection...",getpid());
         int comm_socket = accept(srv_socket, (struct sockaddr *)&cliaddress, &addrlen);
-        if (comm_socket > 0)
-        {
-            printf("client connected from %s:%d\n",inet_ntoa(cliaddress.sin_addr),ntohs(cliaddress.sin_port));
-            int size;
-            int BUF = 1024;
-            char buffer[BUF];
-            string username;
-            int logintry = 0;
-            bool authenticated = false;
-            
-            while(comm_socket > 0)
-            {
-                
-                if(comm_socket <= 0)
-                {
-                    break;
-                }
                
-                size = recv(comm_socket, buffer, BUF-1, 0);
-                buffer[size] = '\0';
+            if (comm_socket > 0)
+            {
+                printf("client connected from %s:%d \n",inet_ntoa(cliaddress.sin_addr),ntohs(cliaddress.sin_port));
+                int size;
+                int BUF = 1024;
+                char buffer[BUF];
+                string username;
+                int logintry = 0;
+                bool authenticated = false;
+                filehandler block = filehandler();
 
-                TCPParse parser = TCPParse(buffer);
-                
-                if(strcmp(parser.method.c_str(), "QUIT") == 0)
+                if(!checkBlock(block.readblacklistentry(inet_ntoa(cliaddress.sin_addr))))
                 {
-                    break;
+                    size = recv(comm_socket, buffer, BUF-1, 0);
+                    strcpy(buffer,"ERR\nstill blocked");
+                    send(comm_socket, buffer, strlen(buffer),0);
+                    close(comm_socket);
+                    comm_socket = -1;
                 }
-                else if(strcmp(parser.method.c_str(), "LOGIN") == 0)
+                while(comm_socket > 0)
                 {
-                    if(authenticated)
+                    if(logintry >= 3)
                     {
-                        strcpy(buffer,"ERR\nAlready logged in");
+                        strcpy(buffer,"ERR\ntoo many failed login attempts");
+                        send(comm_socket, buffer, strlen(buffer),0);
+                        block.writeblacklistentry(inet_ntoa(cliaddress.sin_addr));
+                        close(comm_socket);
+                        comm_socket = -1;
+                    }
+                    if(comm_socket <= 0)
+                    {
+                        break;
+                    }
+                
+                    size = recv(comm_socket, buffer, BUF-1, 0);
+                    buffer[size] = '\0';
+
+                    TCPParse parser = TCPParse(buffer);
+                    
+                    if(strcmp(parser.method.c_str(), "QUIT") == 0)
+                    {
+                        break;
+                    }
+                    else if(strcmp(parser.method.c_str(), "LOGIN") == 0)
+                    {
+                        if(authenticated)
+                        {
+                            strcpy(buffer,"ERR\nAlready logged in");
+                            send(comm_socket, buffer, strlen(buffer),0);
+                        }
+                        else
+                        {
+                            Ldaphandler ldap = Ldaphandler();
+                            switch(ldap.login(parser.username,parser.password))
+                            {
+                                case LDAP_LOGIN_SUCCESS:
+                                    username = parser.username;
+                                    authenticated = true;
+                                    strcpy(buffer,"OK\n");
+                                    send(comm_socket, buffer, strlen(buffer),0);
+                                    break;
+                                case LDAP_LOGIN_FAILED:
+                                    strcpy(buffer,"ERR\ninvalid credentials");
+                                    send(comm_socket, buffer, strlen(buffer),0);
+                                    logintry++;
+                                    break;
+                                case LDAP_LOGIN_ERROR:
+                                    strcpy(buffer,"ERR\nldapserver not reachable");
+                                    send(comm_socket, buffer, strlen(buffer),0);
+                                    break;
+                            }
+                            
+                        }
+                    }
+                    else if(authenticated && strcmp(parser.method.c_str(), "ERROR"))
+                    {
+                        TCPProcessor process = TCPProcessor(spool, username, comm_socket, &parser);
+                        string response = process.getMessage();
+                        
+                        strcpy(buffer,response.c_str());
                         send(comm_socket, buffer, strlen(buffer),0);
                     }
                     else
                     {
-                        /*Ldaphandler ldap = Ldaphandler();
-                        switch(ldap.login(parser.username,parser.password))
-                        {
-                            case LDAP_LOGIN_SUCCESS:
-                                username = parser.username;
-                                authenticated = true;
-                                strcpy(buffer,"OK\n");
-                                send(comm_socket, buffer, strlen(buffer),0);
-                                break;
-                            case LDAP_LOGIN_FAILED:
-                                strcpy(buffer,"ERR\n");
-                                send(comm_socket, buffer, strlen(buffer),0);
-                                logintry++;
-                                break;
-                            case LDAP_LOGIN_ERROR:
-                                strcpy(buffer,"ERR\nldapserver not reachable");
-                                send(comm_socket, buffer, strlen(buffer),0);
-                                break;
-                        }*/
-                        strcpy(buffer,"OK\n");
+                        strcpy(buffer,"ERR\nlogin first");
                         send(comm_socket, buffer, strlen(buffer),0);
-                        authenticated = true;
-                        username = parser.username;
                     }
-                }
-                else if(authenticated && strcmp(parser.method.c_str(), "ERROR"))
-                {
-                    TCPProcessor process = TCPProcessor(spool, username, comm_socket, &parser);
-                    string response = process.getMessage();
+
+                                
                     
-                    strcpy(buffer,response.c_str());
-                    send(comm_socket, buffer, strlen(buffer),0);
                 }
-                else
-                {
-                    strcpy(buffer,"ERR\nlogin first");
-                    send(comm_socket, buffer, strlen(buffer),0);
-                }
-
-                            
-                
+                close(comm_socket);  
             }
-           
-        }
-
-        close(comm_socket);
+                  
     }
+    stop();
 }
 
 
@@ -249,12 +314,12 @@ bool TCPServer::createSpool(char * spoolname)
 //create Directory if it doesnt already exist
     if (mkdir(spoolname, 0777) == -1)
     {
-        printf("spoolfolder already exists\n");
+        log->LogInfo("spoolfolder already exists");
         this->spoolpath = this->spoolpath + convertToString(spoolname);
     }
     else
     {
-        printf("new spoolfolder was created\n") ;
+        log->LogWarning("new spoolfolder was created");
         this->spoolpath = this->spoolpath + convertToString(spoolname);
     }
 
@@ -263,19 +328,19 @@ bool TCPServer::createSpool(char * spoolname)
     if( stat( this->spoolpath.c_str(), &info ) != 0 )
     {
         //information about spoolfolder coule not be accessed
-        printf("spoolfolder could not be accessed\n") ;
+        log->LogError("spoolfolder could not be accessed") ;
         return false;
     }
     else if( info.st_mode & S_IFDIR )
     {
         //information was accessed and is a directory
-        printf("spoolfolder could be accessed correctly\n") ;
+        log->LogSuccess("spoolfolder could be accessed correctly\n") ;
         return true;
     }
     else
     {
         //information was accessed but is not a directory
-        printf("spoolfolder could not be interpreted as folder\n") ;
+        log->LogError("spoolfolder could not be interpreted as folder") ;
         return false;
     }
 }
@@ -293,3 +358,33 @@ string TCPServer::convertToString(char * charArray)
     return result;
 }
 
+bool TCPServer::checkBlock(string entry)
+{
+    if(entry == "ERR\n")
+    {
+        return true;
+    }
+    else
+    {
+        time_t current;
+        time(&current);
+        
+        string time = entry.substr(entry.find('_'),entry.length());
+
+       
+        struct tm tm;
+        strptime(time.c_str(), "_%Y-%m-%d %H:%M:%S", &tm);
+        time_t t = mktime(&tm);
+        printf(to_string(difftime(current, t)).c_str());
+        printf("\n");
+        return (difftime(current, t)>300);
+              
+    }
+}
+
+
+void signalhandler(int sig)
+{
+    running = 0;
+    exit(sig);
+}

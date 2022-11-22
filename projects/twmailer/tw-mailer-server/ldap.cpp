@@ -88,7 +88,7 @@ int login(string username, string password){
    {
       fprintf(stderr,"LDAP bind error: %s\n",ldap_err2string(rc));
       ldap_unbind_ext_s(ld, NULL, NULL);
-       return LDAP_LOGIN_ERROR;
+      return LDAP_LOGIN_FAILED;
    }
    else
    {
@@ -102,7 +102,7 @@ int login(string username, string password){
    {
       fprintf(stderr,"LDAP search error: %s\n",ldap_err2string(rc));
       ldap_unbind_ext_s(ld, NULL, NULL);
-       return LDAP_LOGIN_ERROR;
+       return LDAP_LOGIN_FAILED;
    }
 
    printf("Total results: %d\n", ldap_count_entries(ld, result));

@@ -142,7 +142,7 @@ bool TCPClient::clientMenu(int cli_socket){
         
         default:
             printf("unknown option\n") ;
-            break;
+            return true;
         
     }
 

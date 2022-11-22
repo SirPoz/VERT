@@ -37,7 +37,7 @@ public:
 
    void writeblacklistentry(string ipadress)
    {
-
+      deleteblacklistentry(ipadress);
       string blacklist;
       time_t rawtime;
       struct tm *timeinfo;
@@ -46,7 +46,7 @@ public:
       time(&rawtime);
       timeinfo = localtime(&rawtime);
 
-      strftime(buffer, sizeof(buffer), "%H:%M:%S", timeinfo);
+      strftime(buffer, sizeof(buffer), "%F %H:%M:%S", timeinfo);
       string str(buffer);
 
       blacklist = ipadress + "_" + str + "\n";

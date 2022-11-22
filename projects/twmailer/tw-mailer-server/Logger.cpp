@@ -5,34 +5,33 @@ using namespace std;
 
 class Logger{
     public:
-        Logger(pthread_mutex_t * mutex){
-            this->logMutex = logMutex;
+        Logger(){
+           
         }
 
         void LogError(string log){
-            pthread_mutex_lock(this->logMutex);
+           
             cout << error << log << endl;
-            fflush(stdout);
-            pthread_mutex_unlock(this->logMutex);
+           
         }
         void LogWarning(string log){
             cout << warning << log <<endl;
-            fflush(stdout);
+           
         }
 
         void LogSuccess(string log){
             cout << success << log << endl;
-            fflush(stdout);
+        
         }
 
         void LogInfo(string log){
             cout << info << log << endl;
-            fflush(stdout);
+         
         }
 
         void Log(string log){
             cout << normal << log << endl;
-            fflush(stdout);
+            
         }
 
         string red(string text)
